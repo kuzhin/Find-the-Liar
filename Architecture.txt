@@ -1,0 +1,137 @@
+┌─────────────────────────────────────────────────────────────┐
+│                    АРХИТЕКТУРА ИГРЫ                          │
+│              (с учётом твоих требований)                     │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐
+│   GameSession   │  ← Главный контроллер
+│                 │
+│ • agents: List[Agent]          # 5 агентов
+│ • history: VoteHistory         # Все прошлые голосования
+│ • config: GameConfig           # Веса, правила, лимиты
+│                 │
+│ • run_round(topic) → Result    # Полный цикл: дебаты → голос → итог
+│ • save_state() / load_state()  # Сохранение прогресса
+│ • export_history()             # Выгрузка истории (CSV/JSON)
+└────────┬────────┘
+         │
+         ├────────────────────────────────────────┐
+         │                                        │
+         ▼                                        ▼
+┌─────────────────┐                    ┌─────────────────┐
+│   AgentPool     │                   │  KnowledgeBase  │
+│   (Фабрика)     │                    │  (заглушена)    │
+│                 │                    │                 │
+│ • create(type)  │                    │ • search()      │
+│ • get_all()     │                    │ • add()         │
+│ • register_type()│                   │                 │
+└────────┬────────┘                    └────────┬────────┘
+         │                                      │
+         ▼                                      │
+┌─────────────────┐                             │
+│     Agent       │◄────────────────────────────┘
+│   (Абстрактный) │
+│                 │
+│ • id: str                   # Уникальный ID (agent_1, agent_2...)
+│ • role_type: str            # "warrior", "mage", "merchant"...
+│ • system_prompt: str        # Шаблон роли
+│ • memory: MemoryBank        # Личная память + история чужих ответов
+│ • voting_power: float = 1.0 # Вес голоса (для расширения #8)
+│                 │
+│ • debate(topic, context) → str   # Фаза 1: аргументы
+│ • vote(topic, debate_log) → Vote # Фаза 2: выбор + обоснование
+│ • remember(event)                # Запись в память
+└────────┬────────┘
+         │
+         ├─────────────┬─────────────┬─────────────┐
+         ▼             ▼             ▼             ▼
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│WarriorAgent │ │  MageAgent  │ │MerchantAgent│ │ HumanAgent* │
+│             │ │             │ │             │ │ *(если #5=ДА)│
+│ # Переопределяют system_prompt и, при необходимости, логику
+└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
+
+┌─────────────────┐
+│   MemoryBank    │  ← Память агента
+│                 │
+│ • personal: List[MemoryItem]   # Свои прошлые действия
+│ • social: Dict[str, List]      # Что агент знает о других (agent_id → события)
+│                 │
+│ • add(event: MemoryItem)       # Запись события
+│ • get_context(agent_id, limit) # Получение релевантной истории для промпта
+│ • export() → dict              # Для сериализации
+└─────────────────┘
+
+┌─────────────────┐
+│    Vote         │  ← Результат голосования
+│                 │
+│ • agent_id: str
+│ • choice: str              # "agent_2", "reject", etc.
+│ • reason: str              # Обоснование (если #7=ДА)
+│ • weight: float = 1.0      # Вес голоса (умножается на Agent.voting_power)
+│ • timestamp: datetime
+└─────────────────┘
+
+┌─────────────────┐
+│   VoteParser    │  ← Извлечение структурированных данных
+│                 │
+│ • parse_vote(text) → Vote  # LLM → структурированный объект
+│ • validate(vote) → bool    # Проверка формата
+│ • extract_target(text)     # Кого именно выбрал агент
+└─────────────────┘
+
+┌─────────────────┐
+│   LLMClient     │  ← Обёртка над LM Studio
+│                 │
+│ • base_url: str = "http://localhost:1234/v1"
+│ • model: str
+│ • config: dict (temp, max_tokens, timeout=180)  # 3 минуты лимит
+│                 │
+│ • chat(messages, system_prompt) → str  # Единый метод запроса
+│ • batch_chat(prompts) → List[str]      # Асинхронные запросы для 5 агентов
+│ • is_available() → bool                # Проверка соединения
+└─────────────────┘
+
+┌─────────────────┐
+│   GameState     │  ← Сохранение/Загрузка
+│                 │
+│ • save(session: GameSession, path)   # JSON + SQLite
+│ • load(path) → GameSession           # Восстановление сессии
+│ • export_history(format="csv")       # Выгрузка для анализа
+└─────────────────┘
+
+┌─────────────────┐
+│   StreamlitUI   │  ← Интерфейс (отделён от логики)
+│                 │
+│ • render_session(session)            # Отображение текущего состояния
+│ • render_debate(log)                 # Показ аргументов агентов
+│ • render_results(votes, summary)     # Итоги + визуализация
+│ • on_user_action(callback)           # Обработка кнопок (если #5=ДА)
+└─────────────────┘
+
+
+Structure
+
+my_agent_game/
+├── main.py                 # Точка входа: запуск Streamlit + GameSession
+├── config/
+│   ├── game_config.json    # Настройки (агенты, веса, правила)
+│   └── agents/
+│       ├── warrior.yaml    # Промпты и параметры для WarriorAgent
+│       ├── mage.yaml
+│       └── ...
+├── src/
+│   ├── core/
+│   │   ├── game_session.py # GameSession, Vote, MemoryBank
+│   │   ├── agent.py        # Agent + наследники
+│   │   ├── llm_client.py   # LLMClient для LM Studio
+│   │   └── vote_parser.py  # VoteParser
+│   ├── storage/
+│   │   ├── game_state.py   # Сохранение/загрузка
+│   │   └── knowledge_base.py # Заглушка для RAG (#9)
+│   └── ui/
+│       └── streamlit_app.py # Streamlit-интерфейс
+├── saves/                  # Авто-создаётся: прогресс + история
+├── logs/                   # Логи отладки (опционально)
+├── requirements.txt        # Зависимости
+└── README.md              # Инструкция по запуску
