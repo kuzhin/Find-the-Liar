@@ -1,0 +1,35 @@
+{
+  "game_name": "Мафия — Совет",
+  "version": "0.1.0",
+  
+  "agents": {
+    "types": ["civilian", "killer", "doctor"],
+    "count": 5,
+    "roles_distribution": {
+      "civilian": 3,
+      "killer": 1,
+      "doctor": 1
+    }
+  },
+  
+  "llm": {
+    "base_url": "http://localhost:1234/v1",
+    "model_name": "local-model",
+    "temperature": 0.7,
+    "max_tokens": 500,
+    "timeout": 180
+  },
+  
+  "game_rules": {
+    "night_phase": true,
+    "killer_acts_first": true,
+    "doctor_can_miss": true,
+    "votes_needed_to_eliminate": 0.5
+  },
+  
+  "storage": {
+    "format": "json",
+    "path": "./saves",
+    "export_formats": ["json", "csv"]
+  }
+}
