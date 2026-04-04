@@ -1,20 +1,18 @@
-# Основные зависимости
-langgraph>=0.2.0
-langchain>=0.3.0
-langchain-community>=0.3.0
-
-# Утилиты
-pydantic>=2.0.0
-rich>=13.0.0          # Красивый вывод в консоль
-colorama>=0.4.6       # Цвета в терминале
+# pip install -r requirements.txt
+requests>=2.31.0
+streamlit>=1.30.0     # Для интерфейса (позже)
+pydantic>=2.0.0       # Для валидации данных
+aiohttp>=3.9.0        # Для асинхронных запросов (опционально)
+pandas>=2.0.0         # Для экспорта в CSV/Excel
 
 # Опционально для логирования
 python-dotenv>=1.0.0
 
-# pip install -r requirements.txt
+# Утилиты
+rich>=13.0.0          # Красивый вывод в консоль
+colorama>=0.4.6       # Цвета в терминале
 
-openai>=1.12.0        # LM Studio использует OpenAI-совместимое API
-streamlit>=1.30.0     # Для интерфейса (позже)
-pydantic>=2.5.0       # Для валидации данных
-aiohttp>=3.9.0        # Для асинхронных запросов (опционально)
-pandas>=2.0.0         # Для экспорта в CSV/Excel
+# Основные зависимости
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-community>=0.3.0

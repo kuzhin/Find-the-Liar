@@ -1,14 +1,14 @@
 # src/core/llm_client.py
 """
-LLMClient — обёртка для работы с LM Studio (локальный сервер).
+LLMClient — обёртка для работы с LM Studio через прямые HTTP-запросы.
+Почему не openai-библиотека: твоя версия LM Studio не поддерживает все эндпоинты openai SDK.
 """
 
 import logging
+import requests
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 from datetime import datetime
-
-from openai import OpenAI, APIError, APITimeoutError
 
 # Настройка логирования
 logging.basicConfig(
@@ -20,13 +20,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class LLMConfig:
-    """Конфигурация подключения к LLM."""
-    model_name: str = "auto"  # "auto" = взять первую доступную модель из LM Studio
-    base_url: str = "http://localhost:1234/v1"  # 
-    api_key: str = "lm-studio"
+    """Конфигурация подключения к LM Studio."""
+    # 👇 ВАЖНО: укажи точное имя модели из http://127.0.0.1:1234/v1/models
+
+    model_name: str = "liquid/lfm2.5-1.2b" #qwen2.5-coder-7b-instruct
+    # 👇 Используем 127.0.0.1 вместо localhost (надёжнее на Windows)
+    base_url: str = "http://127.0.0.1:1234/v1"
+    api_key: str = "lm-studio"  # Любой, LM Studio не проверяет
     temperature: float = 0.7
     max_tokens: int = 500
-    timeout: int = 180  # 3 минуты
+    timeout: int = 180  # 3 минуты — твой лимит
     retry_count: int = 2
 
 
@@ -49,58 +52,27 @@ class LLMResponse:
 
 
 class LLMClient:
-    """
-    Основной клиент для работы с LM Studio.
-    
-    Пример использования:
-        client = LLMClient()
-        response = client.chat("Привет!", "Ты полезный ассистент.")
-        print(response.content)
-    """
+    """Клиент для работы с LM Studio через requests."""
     
     def __init__(self, config: Optional[LLMConfig] = None):
-        """
-        Инициализация клиента.
-        
-        :param config: Конфигурация (если None — используются значения по умолчанию)
-        """
         self.config = config or LLMConfig()
-        
-        # Если model_name = "auto", узнаем реальную модель из LM Studio
-        if self.config.model_name == "auto":
-            self.config.model_name = self._detect_model()
-            logger.info(f"🔍 Авто-обнаружена модель: {self.config.model_name}")
-        
-        self.client = OpenAI(
-            base_url=self.config.base_url,
-            api_key=self.config.api_key,
-            timeout=self.config.timeout
-        )
+        self.session = requests.Session()
+        self.session.headers.update({
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config.api_key}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) LMStudio-Client"
+        })
         logger.info(f"🔌 LLMClient инициализирован: {self.config.base_url}")
-    
-    def _detect_model(self) -> str:
-        """Получает первую доступную модель из LM Studio."""
-        try:
-            import urllib.request
-            import json
-            url = self.config.base_url.rstrip("/v1") + "/v1/models"
-            with urllib.request.urlopen(url, timeout=5) as response:
-                data = json.loads(response.read().decode())
-                models = data.get("data", [])
-                # Ищем первую НЕ-эмбеддинг модель
-                for m in models:
-                    if "embedding" not in m.get("id", "").lower():
-                        return m["id"]
-                return models[0]["id"] if models else "local-model"
-        except Exception as e:
-            logger.warning(f"⚠️ Не удалось авто-определить модель: {e}")
-            return "local-model"
+        logger.info(f"📦 Используемая модель: {self.config.model_name}")
     
     def is_available(self) -> bool:
         """Проверка доступности сервера."""
         try:
-            self.client.models.list()
-            logger.info("✅ LM Studio сервер доступен")
+            url = self.config.base_url.rstrip("/") + "/models"
+            resp = self.session.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            logger.info(f"✅ LM Studio сервер доступен, найдено моделей: {len(data.get('data', []))}")
             return True
         except Exception as e:
             logger.error(f"❌ LM Studio сервер недоступен: {e}")
@@ -117,29 +89,39 @@ class LLMClient:
         """Синхронный запрос к модели."""
         
         use_model = model or self.config.model_name
+        url = self.config.base_url.rstrip("/") + "/chat/completions"
+        
+        payload = {
+            "model": use_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            "temperature": temperature or self.config.temperature,
+            "max_tokens": max_tokens or self.config.max_tokens,
+            "stream": False  # Важно: отключаем стриминг для простоты
+        }
         
         for attempt in range(self.config.retry_count + 1):
             try:
-                logger.info(f"📤 Запрос к модели '{use_model}' (попытка {attempt + 1})")
+                logger.info(f"📤 Запрос к '{use_model}' (попытка {attempt + 1})")
                 
-                response = self.client.chat.completions.create(
-                    model=use_model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message}
-                    ],
-                    temperature=temperature or self.config.temperature,
-                    max_tokens=max_tokens or self.config.max_tokens,
+                resp = self.session.post(
+                    url,
+                    json=payload,
                     timeout=self.config.timeout
                 )
+                resp.raise_for_status()
                 
-                content = response.choices[0].message.content.strip()
+                result = resp.json()
+                content = result['choices'][0]['message']['content'].strip()
                 
+                # Считаем токены, если есть
                 tokens = 0
-                if hasattr(response, 'usage') and response.usage:
-                    tokens = response.usage.total_tokens or 0
+                if 'usage' in result and result['usage']:
+                    tokens = result['usage'].get('total_tokens', 0)
                 
-                logger.info(f"✅ Получен ответ ({tokens} токенов)")
+                logger.info(f"✅ Ответ получен ({tokens} токенов)")
                 
                 return LLMResponse(
                     content=content,
@@ -148,20 +130,26 @@ class LLMClient:
                     tokens_used=tokens
                 )
                 
-            except APITimeoutError:
+            except requests.exceptions.Timeout:
                 error_msg = f"Таймаут ответа ({self.config.timeout} сек)"
                 logger.warning(f"⚠️ {error_msg}")
                 if attempt == self.config.retry_count:
                     return LLMResponse(content="", success=False, error_message=error_msg, model=use_model)
                     
-            except APIError as e:
-                error_msg = f"API ошибка: {str(e)}"
+            except requests.exceptions.HTTPError as e:
+                error_msg = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                logger.error(f"❌ {error_msg}")
+                if attempt == self.config.retry_count:
+                    return LLMResponse(content="", success=False, error_message=error_msg, model=use_model)
+                    
+            except requests.exceptions.ConnectionError as e:
+                error_msg = f"Не удалось подключиться: {e}"
                 logger.error(f"❌ {error_msg}")
                 if attempt == self.config.retry_count:
                     return LLMResponse(content="", success=False, error_message=error_msg, model=use_model)
                     
             except Exception as e:
-                error_msg = f"Неизвестная ошибка: {type(e).__name__}: {str(e)}"
+                error_msg = f"{type(e).__name__}: {str(e)}"
                 logger.error(f"❌ {error_msg}")
                 if attempt == self.config.retry_count:
                     return LLMResponse(content="", success=False, error_message=error_msg, model=use_model)
@@ -174,7 +162,7 @@ class LLMClient:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None
     ) -> List[LLMResponse]:
-        """Пакетный запрос (последовательно, но в одном вызове)."""
+        """Пакетный запрос (последовательно)."""
         logger.info(f"📤 Пакетный запрос: {len(prompts)} агентов")
         results = []
         for i, prompt in enumerate(prompts):
@@ -190,12 +178,16 @@ class LLMClient:
         return results
     
     def get_model_info(self) -> Dict[str, Any]:
-        """Информация о подключённой модели."""
+        """Информация о доступных моделях."""
         try:
-            models = self.client.models.list()
+            url = self.config.base_url.rstrip("/") + "/models"
+            resp = self.session.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            models = [m["id"] for m in data.get("data", []) if "embedding" not in m.get("id", "").lower()]
             return {
                 "available": True,
-                "models": [m.id for m in models.data] if models.data else ["local-model"],
+                "models": models if models else ["local-model"],
                 "base_url": self.config.base_url
             }
         except Exception as e:
@@ -206,19 +198,27 @@ class LLMClient:
 if __name__ == "__main__":
     print("🧪 Тест LLMClient для LM Studio\n")
     
-    client = LLMClient()  # auto-определит модель
+    # 👇 ВАЖНО: укажи свою модель здесь или в config
+    config = LLMConfig(
+        model_name="liquid/lfm2.5-1.2b", #qwen2.5-coder-7b-instruct,  # ← Твоя модель из /v1/models
+        base_url="http://127.0.0.1:1234/v1"
+    )
+    
+    client = LLMClient(config)
     
     print("1️⃣ Проверка подключения...")
     if not client.is_available():
         print("❌ LM Studio не отвечает")
+        print("💡 Убедись: сервер запущен, модель загружена, порт 1234")
         exit(1)
     
     print("✅ Сервер доступен\n")
     
-    print("2️⃣ Информация о модели:")
+    print("2️⃣ Доступные модели:")
     info = client.get_model_info()
-    print(f"   URL: {info['base_url']}")
-    print(f"   Доступные модели: {info.get('models')}\n")
+    for m in info.get('models', []):
+        print(f"   • {m}")
+    print()
     
     print("3️⃣ Тестовый запрос:")
     response = client.chat(
@@ -234,5 +234,3 @@ if __name__ == "__main__":
         print(f"❌ Ошибка: {response.error_message}")
     
     print("\n🎉 Тест завершён!")
-
-
