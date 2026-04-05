@@ -34,11 +34,11 @@ if __name__ == "__main__":
     print("1️⃣  Тест памяти:")
     agent.memory.add(MemoryItem("debate", "Я считаю, что агент_2 подозрителен"))
     agent.observe("killer_0", "ночью ходил к дому агента_3")
-    print(f"   Контекст для промпта:\n{agent.memory.to_prompt_context()}\n")
+    print(f"   Контекст для промпта:\n{agent.memory.to_prompt_context(limit=10)}\n")
     
     # 3. Тест think()
     print("2️⃣  Тест think():")
-    answer = agent.think("Какой сегодня день?")
+    answer = agent.think("Не пиши сегодняшнюю дату и время.")
     print(f"   Ответ: {answer}\n")
     
     # 4. Тест debate()

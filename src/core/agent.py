@@ -75,15 +75,15 @@ class Agent(ABC):
         :param override_system: Временная замена системного промпта (редко нужно)
         :return: Текст ответа модели
         """
-            # Добавляем дату в системный промпт
-        current_datetime = datetime.now().strftime("%d %B %Y года, %H:%M")
+        # Добавляем дату в системный промпт
+        # current_datetime = datetime.now().strftime("%d %m %Y года, %H:%M:%S")
+        # system_with_date = f"{base_system}\n\n📅 Текущая дата и время: {current_datetime}"
         
-        base_system = override_system or self.system_prompt
-        system_with_date = f"{base_system}\n\n📅 Текущая дата и время: {current_datetime}"
+        base_system = override_system or self.system_prompt # TODO: думаю, эта строка лишняя. Проверить на дебагге. 
         
         response: LLMResponse = self.llm.chat(
             user_message=prompt,
-            system_prompt=system_with_date,
+            system_prompt=base_system,
             temperature=0.7,  # Можно вынести в конфиг
             max_tokens=400
         )
