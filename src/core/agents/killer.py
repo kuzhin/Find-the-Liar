@@ -13,7 +13,7 @@ from ..agent import Agent, AgentConfig
 from ..llm_client import LLMClient
 from ..memory import MemoryItem
 from ..vote import Vote
-from ...utils.helpers import inject_datetime
+# from ...utils.helpers import inject_datetime
 
 class KillerAgent(Agent):
     """Мафия: манипулирует, лжёт, устраняет ночью."""
@@ -37,7 +37,6 @@ class KillerAgent(Agent):
 • Голосуй против тех, кто задаёт неудобные вопросы
 • Если тебя прямо обвиняют — защищайся эмоционально, но правдоподобно
 
-{inject_datetime()}
 Отвечай на русском, от первого лица, кратко (2-4 предложения)."""
     
     def _format_debate_prompt(self, topic: str, context: List[Dict]) -> str:
@@ -68,55 +67,48 @@ class KillerAgent(Agent):
 
 Твой ответ (будь хитрым, но правдоподобным):"""
     
-    def night_action(self, alive_agents: List[str], memory_context: str = "") -> str:
-        """
-        Ночное действие: выбор жертвы.
-        
-        :param alive_agents: Список ID живых агентов (кроме себя)
-        :param memory_context: Контекст из памяти для принятия решения
-        :return: ID агента для устранения
-        """
-        # Формируем промпт с контекстом
-        prompt = f"""
+def night_action(self, alive_agents: List[str], memory_context: str = "") -> str:
+    # 🔧 ФИКС: убираем себя из списка возможных жертв
+    valid_targets = [a for a in alive_agents if a != self.config.agent_id]
+    
+    if not valid_targets:
+        return "no_one"  # Нечего устранять
+    
+    prompt = f"""
 🌙 НОЧЬ. Ты — Мафия.
 
-Живые агенты (можно устранить): {', '.join(alive_agents)}
+Живые агенты (можно устранить): {', '.join(valid_targets)}
+⚠️ Ты НЕ можешь устранить себя.
 
-{f"Твои наблюдения из памяти:\n{memory_context}" if memory_context else ""}
+{f"Твои наблюдения:\n{memory_context}" if memory_context else ""}
 
 ИНСТРУКЦИЯ:
 Выбери ОДНУ жертву для устранения.
 • Приоритет: те, кто тебя подозревал в дебатах
-• Избегай: тех, кто тебя защищал (возможные союзники)
 
-Ответь ТОЛЬКО ID агента в формате: agent_N
+Ответь ТОЛЬКО ID в формате: agent_N
 Пример: agent_3
 
 Твой выбор:"""
-        
+    
+    target_raw = self.think(prompt).strip()
+    
+    # 🔧 ФИКС: передаём exclude_self в парсер
+    target = parse_agent_id(target_raw, exclude_self=self.config.agent_id)
+    
+    # Валидация: если парсер вернул invalid — берём первого из списка
+    if target in ["parse_error", "unknown_agent", "no_one", None]:
+        target = valid_targets[0]
+    
+    self.night_target = target
         # Запрос к модели
-        target = self.think(prompt).strip().lower()
-        
-        # Парсинг: извлекаем agent_N
-        import re
-        match = re.search(r'agent[_\s]?(\d+)', target)
-        if match:
-            target = f"agent_{match.group(1)}"
-        else:
-            # Fallback: первый из списка
-            target = alive_agents[0] if alive_agents else "unknown"
-        
-        # Проверяем, что цель жива и не мы сами
-        if target not in alive_agents:
-            target = alive_agents[0] if alive_agents else "unknown"
-        
-        self.night_target = target
-        
-        # Сохраняем в память
-        self.memory.add(MemoryItem(
-            event_type="night_action",
-            content=f"🔪 Ночью устранил: {target}",
-            metadata={"phase": "night", "action": "eliminate", "target": target}
-        ))
-        
-        return target
+    self.night_target = target
+    
+    # Сохраняем в память
+    self.memory.add(MemoryItem(
+        event_type="night_action",
+        content=f"🔪 Ночью устранил: {target}",
+        metadata={"phase": "night", "action": "eliminate", "target": target}
+    ))
+    
+    return target

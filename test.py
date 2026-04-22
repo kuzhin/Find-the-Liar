@@ -64,17 +64,39 @@ def test_role(agent_class, role_name: str, agent_id: str):
     return agent
 
 # === Запуск тестов ===
+# if __name__ == "__main__":
+#     print("🎭 Тест ролей агентов для игры Мафия")
+#     print(f"📅 Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+#     print(f"🤖 Модель: {config.model_name}")
+    
+#     # Тестируем три роли
+#     civilian = test_role(CivilianAgent, "Civilian", "agent_1")
+#     killer = test_role(KillerAgent, "Killer", "agent_2")
+#     doctor = test_role(DoctorAgent, "Doctor", "agent_3")
+    
+#     # Бонус: проверка спасения (если доктор угадал цель мафии)
+#     print(f"\n{'='*60}")
+#     print("🔍 Проверка ночного исхода:")
+#     killer_target = killer.night_target
+#     doctor_saved = doctor.night_save_target
+#     saved = (killer_target == doctor_saved)
+    
+#     print(f"   Мафия атаковала: {killer_target}")
+#     print(f"   Доктор лечил: {doctor_saved}")
+#     print(f"   ✅ Жертва спасена!" if saved else f"   ❌ Жертва устранена...")
+    
+#     print(f"\n🎉 Тест ролей завершён!")
+
+# === Запуск тестов ===
 if __name__ == "__main__":
     print("🎭 Тест ролей агентов для игры Мафия")
-    print(f"📅 Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-    print(f"🤖 Модель: {config.model_name}")
     
-    # Тестируем три роли
+    # Тестируем три роли — ровно 3 вызова!
     civilian = test_role(CivilianAgent, "Civilian", "agent_1")
     killer = test_role(KillerAgent, "Killer", "agent_2")
-    doctor = test_role(DoctorAgent, "Doctor", "agent_3")
+    doctor = test_role(DoctorAgent, "Doctor", "agent_3")  # ← только один раз!
     
-    # Бонус: проверка спасения (если доктор угадал цель мафии)
+    # Проверка ночного исхода
     print(f"\n{'='*60}")
     print("🔍 Проверка ночного исхода:")
     killer_target = killer.night_target
@@ -83,6 +105,6 @@ if __name__ == "__main__":
     
     print(f"   Мафия атаковала: {killer_target}")
     print(f"   Доктор лечил: {doctor_saved}")
-    print(f"   ✅ Жертва спасена!" if saved else f"   ❌ Жертва устранена...")
+    print(f"   {'✅ Жертва спасена!' if saved else '❌ Жертва устранена...'}")
     
     print(f"\n🎉 Тест ролей завершён!")
