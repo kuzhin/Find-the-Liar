@@ -8,6 +8,7 @@ KillerAgent — Мафия.
 • Ночью выбирает жертву для устранения
 """
 
+from src.utils.helpers import parse_agent_id
 from typing import List, Dict, Optional
 from ..agent import Agent, AgentConfig
 from ..llm_client import LLMClient
