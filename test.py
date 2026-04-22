@@ -53,58 +53,32 @@ def test_role(agent_class, role_name: str, agent_id: str):
     print(f"   Выбор: {vote['choice']}")
     print(f"   Причина: {vote['reason']}")
     
-    # 3. Ночное действие (только для Killer/Doctor)
-    if hasattr(agent, 'night_action'):
-        print(f"\n🌙 Ночное действие:")
-        alive = ["agent_1", "agent_2", "agent_3", "agent_4", agent_id]
-        target = agent.night_action(alive)
-        action_name = "устранение" if role_name == "Killer" else "лечение"
-        print(f"   {agent_id} выбрал {action_name}: {target}")
+    # Создаём запрос
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers=headers,
+        method='POST'
+    )
     
-    return agent
-
-# === Запуск тестов ===
-# if __name__ == "__main__":
-#     print("🎭 Тест ролей агентов для игры Мафия")
-#     print(f"📅 Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-#     print(f"🤖 Модель: {config.model_name}")
+    # Отправляем
+    with urllib.request.urlopen(req, context=context, timeout=30) as response:
+        result = json.loads(response.read().decode('utf-8'))
+        
+        print("✅ УСПЕХ! Ответ получен:")
+        print("-" * 50)
+        content = result['choices'][0]['message']['content']
+        print(content)
+        print("-" * 50)
+        print(f"\n🎉 LM Studio работает! Проблема была в библиотеке openai.")
+        
+except urllib.error.HTTPError as e:
+    print(f"❌ HTTP Ошибка {e.code}: {e.reason}")
+    print(f"📄 Ответ сервера: {e.read().decode()[:200]}")
     
-#     # Тестируем три роли
-#     civilian = test_role(CivilianAgent, "Civilian", "agent_1")
-#     killer = test_role(KillerAgent, "Killer", "agent_2")
-#     doctor = test_role(DoctorAgent, "Doctor", "agent_3")
+except urllib.error.URLError as e:
+    print(f"❌ URL Ошибка: {e.reason}")
+    print("💡 Попробуй заменить 'localhost' на '127.0.0.1' в URL")
     
-#     # Бонус: проверка спасения (если доктор угадал цель мафии)
-#     print(f"\n{'='*60}")
-#     print("🔍 Проверка ночного исхода:")
-#     killer_target = killer.night_target
-#     doctor_saved = doctor.night_save_target
-#     saved = (killer_target == doctor_saved)
-    
-#     print(f"   Мафия атаковала: {killer_target}")
-#     print(f"   Доктор лечил: {doctor_saved}")
-#     print(f"   ✅ Жертва спасена!" if saved else f"   ❌ Жертва устранена...")
-    
-#     print(f"\n🎉 Тест ролей завершён!")
-
-# === Запуск тестов ===
-if __name__ == "__main__":
-    print("🎭 Тест ролей агентов для игры Мафия")
-    
-    # Тестируем три роли — ровно 3 вызова!
-    civilian = test_role(CivilianAgent, "Civilian", "agent_1")
-    killer = test_role(KillerAgent, "Killer", "agent_2")
-    doctor = test_role(DoctorAgent, "Doctor", "agent_3")  # ← только один раз!
-    
-    # Проверка ночного исхода
-    print(f"\n{'='*60}")
-    print("🔍 Проверка ночного исхода:")
-    killer_target = killer.night_target
-    doctor_saved = doctor.night_save_target
-    saved = (killer_target == doctor_saved)
-    
-    print(f"   Мафия атаковала: {killer_target}")
-    print(f"   Доктор лечил: {doctor_saved}")
-    print(f"   {'✅ Жертва спасена!' if saved else '❌ Жертва устранена...'}")
-    
-    print(f"\n🎉 Тест ролей завершён!")
+except Exception as e:
+    print(f"❌ Неизвестная ошибка: {type(e).__name__}: {e}")
